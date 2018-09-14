@@ -10,6 +10,8 @@ from keras.optimizers import Adam
 from keras.models import Model
 from keras.losses import categorical_crossentropy,binary_crossentropy
 from keras import regularizers
+from data import *
+
 weight_decay_rate=0.0001
 class age_gender_classifier():
     def __init__(self,model_path,lr=0.0001,test_size=(64,64)):

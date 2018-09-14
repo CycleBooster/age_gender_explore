@@ -4,11 +4,11 @@ from keras import backend as K
 # from lxml import objectify
 import cv2
 from dataset import data_writer,data_reader
-from progress.bar import Bar
-import progressbar
+# from progress.bar import Bar
+# import progressbar
 import matplotlib.pyplot as plt
 import random
-from progress import bar
+# from progress import bar
 def preprocess_input(x, dim_ordering='default',is_list=False):
     if dim_ordering == 'default':
         dim_ordering = K.image_dim_ordering()

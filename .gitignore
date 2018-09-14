@@ -1,0 +1,9 @@
+data/*
+logs/*
+model/*
+test_photo/*
+__pycache__/*
+.vscode/*
+*.docx
+*.zip
+*.pyc
