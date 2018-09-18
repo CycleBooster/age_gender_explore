@@ -4,4 +4,5 @@
 
 
 from data_stream import data_generator
-test_data=data_generator("none")
+test_data=data_generator("age_gender_appa")
+test_data.show_data()

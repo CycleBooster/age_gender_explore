@@ -47,21 +47,20 @@ class dataset_reader():
             return input_set
 
 class data_writer():
-    def __init__(self,name):
+    def __init__(self,name,path):
         self.size=0
-        self.data=h5py.File("./data/hdf5/"+name+".hdf5", "w")
+        self.data=h5py.File(path+name+".hdf5", "w")
     def build_dataset(self,dataset_name,data_shape):
         dataset = self.data.create_dataset(dataset_name, (self.size,)+data_shape, maxshape=(None,)+data_shape)
         # dataset = self.data.create_dataset(dataset_name, (self.size,)+data_shape, maxshape=(None,)+data_shape,compression="lzf")
-    def add_size(self):
-        self.size=self.size+1
     def write(self,dataset_name,data):
+        self.size=self.size+1
         dataset=self.data[dataset_name]
         dataset.resize(self.size,axis=0)
         dataset[self.size-1]=data
 class data_reader():
-    def __init__(self,name):
-        self.data=h5py.File("./data/hdf5/"+name+".hdf5", "r")
+    def __init__(self,name,path):
+        self.data=h5py.File(path+name+".hdf5", "r")
     def get_size(self,dataset_name):
         dataset=self.data.get(dataset_name)
         return dataset.shape[0]
