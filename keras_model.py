@@ -51,14 +51,22 @@ class age_gender_classifier():
     def gender_loss(self,y_true,y_pred):
         loss=binary_crossentropy(y_true,y_pred)
         return loss
-    def predict(self,img_name)
-        self.model.load_weights(self.model_path)
+    def predict(self,img_name,load_weight=False):
+        if load_weight:
+            self.model.load_weights(self.model_path)
         img_path = './test_photo/'+img_name+'.'+file_type
         if not os.path.isfile(img_path):
             print("img doesn't exist")
             exit()
         origin_x = cv2.imread(img_path,-1)
         x=cv2.resize(origin_x,self.test_size)
-        x = preprocess_input(x)
+        x = resnet50_preprocess_input(x)
         x = np.expand_dims(x, axis=0)
-        preds = self.model.predict(x)
+        preds = self.pred_model.predict(x)
+    def average_absolute_error(self,y_true,y_pred):#acc for age
+
+    def error_std(self,y_true,y_pred):#acc for age
+
+    def gender_acc_3(self,y_true,y_pred):
+    def gender_acc_5(self,y_true,y_pred):
+    def gender_acc_7(self,y_true,y_pred):
