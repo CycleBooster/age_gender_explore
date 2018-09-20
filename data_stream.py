@@ -12,21 +12,30 @@ from multiprocessing import Process,Queue
 from dataset import data_writer,data_reader
 from data import *
 class data_generator():
-    def __init__(self,data_name,batch_size=32
-    ,random_crop=False,random_mirror=False,random_width=False,random_rotate=False,shuffle=False):
+    def __init__(self,data_name,batch_size=32,one_hot_gender=True
+    ,random_crop=False,random_mirror=False,random_width=False,random_rotate=False,random_size=False,shuffle=False):
         self.output_size=(64,64)
         self.data_size=(128,128)#width and height must be the same to avoid resize and dataset get error
         # self.crop_size_list=[]#set after get data name
         self.data_name=data_name
         self.batch_size=batch_size
+        self.one_hot_gender=one_hot_gender
         self.random_crop=random_crop
         self.random_mirror=random_mirror
         self.random_width=random_width
         self.random_rotate=random_rotate
+        self.random_size=random_size
         self.shuffle=shuffle
         self.queue= Queue()
         self.__build_data()
         self.__get_data_len()
+        if self.data_name=="age_gender_UTK":
+            self.scale_list=[0.5,0.45,0.4]
+        elif self.data_name=="age_gender_appa":
+            self.scale_list=[1,0.9,0.8]
+        else:
+            print("error in data name")
+            exit()
     def __get_imdb_year(self,dob):
         birth=datetime.fromordinal(max(int(dob) - 366, 1))
         if birth.month<7:
@@ -141,6 +150,8 @@ class data_generator():
         else:
             print("error in data name")
             exit()
+    def __get_data_len(self):
+        self.data_len=self.__data_read(label_only=True).shape[0]
     def __data_read(self,label_only=False):
         if self.data_name=="age_gender_UTK":
             label_path=self.hdf5_path+"UTK_label.npy"
@@ -155,28 +166,65 @@ class data_generator():
             return labels,imgs
         else:
             return labels
-    def __get_data_len(self):
-        label_path="./data/hdf5/"+self.data_name+self.end_name+"_label.npy"
-        self.data_len=__data_read(label_only=True).shape[0]
+
     def __set_input(self,img):
-        random_num=random.randint(0,30)
+        random_num=random.randint(0,29)
         temp_img=np.array(img,copy=True)
-        if self.random_mirror:#2
-        
+        (h,w)=temp_img.shape[:2]
+        if self.random_mirror and (random_num%2)==0:
+            temp_img=cv2.flip(temp_img,1)
         if self.random_width:#3
-
+            if random_num%3==1:#wider
+                temp_img=cv2.resize(temp_img,(w,(int)(h*0.9)))
+            elif random_num%3==2:#higher
+                temp_img=cv2.resize(temp_img,((int)(w*0.9),h))
+            (h,w)=temp_img.shape[:2]
         if self.random_rotate:#5
-        
-        crop_random_num=random.randint(0,9)
-        if self.random_crop:#9
-            
+            angle=(random_num%5-2)*10
+        else:
+            angle=0
+        if self.random_size:
+            random_size_num=random.randint(0,2)
+            scale=self.scale_list[random_size_num]
+            print(scale)
+        else:
+            scale=self.scale_list[0]
+        M = cv2.getRotationMatrix2D((w/2,h/2), angle, scale)
+        temp_img = cv2.warpAffine(temp_img, M, (w, h))
+        if self.random_crop:
+            crop_random_num=random.randint(0,8)
+            offset_para=3
+            w_offset=((int)(crop_random_num/3)-1)*offset_para
+            h_offset=(crop_random_num%3-1)*offset_para
+        else:
+            w_offset=0
+            h_offset=0
+        h_start=(int)(h/2+h_offset-self.output_size[0]/2)
+        w_start=(int)(w/2+w_offset-self.output_size[1]/2)
+        out_img=temp_img[h_start:h_start+self.output_size[0],w_start:w_start+self.output_size[1],:]
+        return out_img
     def __set_label(self,meta_label):#decode label
-
+        meta_age=meta_label[0]
+        if self.one_hot_gender:
+            age=np.zeros(101)
+            age[(int)(meta_age)]=1
+        gender=meta_label[1]
+        #gender=1 for male
+        if self.data_name=="age_gender_UTK":
+            gender=1-(int)(gender)
+        elif self.data_name=="age_gender_appa":
+            if gender=="male":
+                gender=1
+            else:
+                gender=0
+        return gender,age
     def __get_data(self,img_buffer,label_buffer,index_buffer,buffer_start_index):
         _inputs=np.zeros((self.batch_size,)+self.output_size+(3,))
         _out_gender=np.zeros((self.batch_size,1))
-        _out_age=np.zeros((self.batch_size,1))#age regression
-        # _out_age=np.zeros((self.batch_size,101))#age classification
+        if self.one_hot_gender:
+            _out_age=np.zeros((self.batch_size,101))#age classification
+        else:
+            _out_age=np.zeros((self.batch_size,1))#age regression
         for i in range(self.batch_size):
             _inputs[i]=self.__set_input(img_buffer[index_buffer[i+buffer_start_index]])
             _out_gender[i],_out_age[i]=self.__set_label(label_buffer[index_buffer[i+buffer_start_index]])
@@ -185,7 +233,8 @@ class data_generator():
         labels,imgs=self.__data_read()
         for i in range(10):
             print(labels[i])
-            show_image(imgs[i])
+            test_img=self.__set_input(imgs[i])
+            show_image(test_img)
     def data_process(self):
         labels,imgs=self.__data_read()
         buffer_multiple=10
@@ -215,5 +264,12 @@ class data_generator():
         while True:
             if self.queue.empty()==False:
                 yield self.queue.get()
+    def test_data(self,start_index=0):
+        labels,imgs=self.__data_read()
+        index=[i for i in range(len(imgs))]
+        now_index=start_index
+        while True:
+            yield self.__get_data(imgs,labels,index,now_index)
+            now_index=now_index+self.batch_size
 
         
