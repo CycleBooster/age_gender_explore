@@ -65,7 +65,7 @@ class data_generator():
         label_path=self.hdf5_path+"UTK_label.npy"
         if os.path.isfile(self.hdf5_path+input_name+".hdf5") and os.path.isfile(label_path):
             return 
-        data_path="./data/UTKFace/crop/"
+        data_path="./data/UTKFace/"
         img_name_list=os.listdir(data_path)
         data_len=len(img_name_list)
         print("data length is "+str(data_len))
