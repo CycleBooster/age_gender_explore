@@ -258,6 +258,8 @@ class data_generator():
                 if restart_flag:
                     start_index=0
                     restart_flag=False
+    def get_max_batch_index(self):
+        return (int)(self.data_len/self.batch_size)
     def generator(self):
         self.p=Process(target=self.data_process,daemon=True)
         self.p.start()

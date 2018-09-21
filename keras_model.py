@@ -1,5 +1,6 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'import keras
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import keras
 import sys
 import tensorflow as tf
 import numpy as np
@@ -9,15 +10,18 @@ from keras.layers import Conv2D,Dense,Flatten,Activation,Lambda
 from keras.optimizers import Adam
 from keras.models import Model
 from keras.losses import categorical_crossentropy,binary_crossentropy
+from keras.callbacks import LearningRateScheduler,LambdaCallback
 from keras import regularizers
 from data import *
 from data_stream import data_generator
 weight_decay_rate=0.0001
 class age_gender_classifier():
-    def __init__(self,model_path,lr=0.0001,test_size=(64,64),model_type="one"):
+    def __init__(self,model_path,batch_size=64,lr=0.0001,test_size=(64,64),model_type="one"):
         self.age_width=101
+        self.model_path=model_path
         self.lr=lr
         self.model_type=model_type
+        self.batch_size=batch_size
         pretrain_model=ResNet50(input_shape=test_size+(3,),weights='imagenet',include_top=False)
         x=pretrain_model.input
         pretrain_output=pretrain_model.output
@@ -36,17 +40,17 @@ class age_gender_classifier():
 
         self.optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
         if model_type=="one":
-            self.train_model=Model(inputs=x,outputs={gender_y,one_age_y})
+            self.train_model=Model(inputs=x,outputs=[gender_y,one_age_y])
             self.pred_model=self.train_model
             self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"one_age_y":self.age_loss_R}
                 ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
         if model_type=="soft":
-            self.train_model=model(inputs=x,outputs=[gender_y,softmax_age_y])
+            self.train_model=Model(inputs=x,outputs=[gender_y,softmax_age_y])
             self.pred_model=Model(inputs=x,outputs=[gender_y,out_age])
-            self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"soft_age_y":self.age_loss}
+            self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"soft_age_y":self.age_loss_C}
                 ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_C})
         if model_type=="out":
-            self.train_model=model(inputs=x,outputs=[gender_y,out_age])
+            self.train_model=Model(inputs=x,outputs=[gender_y,out_age])
             self.pred_model=self.train_model
             self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"out_age_y":self.age_loss_R}
                 ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
@@ -80,23 +84,23 @@ class age_gender_classifier():
         return acc
     def g_acc_3(self,y_true,y_pred):
         pos_y=tf.to_float(y_pred>0.3)
-        equal_y=tf.equal(y_true,pos_y)
+        equal_y=tf.where(tf.equal(y_true,pos_y),tf.ones(tf.shape(y_pred)),tf.zeros(tf.shape(y_pred)))
         acc=tf.reduce_mean(equal_y)
         return acc
-    def gacc_5(self,y_true,y_pred):
+    def g_acc_5(self,y_true,y_pred):
         pos_y=tf.to_float(y_pred>0.5)
-        equal_y=tf.equal(y_true,pos_y)
+        equal_y=tf.where(tf.equal(y_true,pos_y),tf.ones(tf.shape(y_pred)),tf.zeros(tf.shape(y_pred)))
         acc=tf.reduce_mean(equal_y)
         return acc
     def g_acc_7(self,y_true,y_pred):
         pos_y=tf.to_float(y_pred>0.7)
-        equal_y=tf.equal(y_true,pos_y)
+        equal_y=tf.where(tf.equal(y_true,pos_y),tf.ones(tf.shape(y_pred)),tf.zeros(tf.shape(y_pred)))
         acc=tf.reduce_mean(equal_y)
         return acc
     def predict(self,img_name,load_weight=False):
         if load_weight:
-            self.model.load_weights(self.model_path)
-        img_path = './test_photo/'+img_name+'.'+file_type
+            self.train_model.load_weights(self.model_path)
+        img_path = './test_photo/'+img_name
         if not os.path.isfile(img_path):
             print("img doesn't exist")
             exit()
@@ -105,25 +109,25 @@ class age_gender_classifier():
         x = resnet50_preprocess_input(x)
         x = np.expand_dims(x, axis=0)
         preds = self.pred_model.predict(x)
-    def train(self,keep_train=False):
+    def train(self,epoch,keep_train=False):
         if keep_train:
-            self.model.load_weights(self.model_path)
+            self.train_model.load_weights(self.model_path)
         if self.model_type=="soft":
             one_hot_flag=True
         else:
             one_hot_flag=False
-        data_gen=data_generator(self.data_name,batch_size=self.batch_size,one_hot_gender=one_hot_flag
-            ,random_crop=False,random_mirror=False,random_width=False,random_rotate=False,random_size=False,shuffle=False)
+        data_gen=data_generator("age_gender_UTK",batch_size=self.batch_size,one_hot_gender=one_hot_flag
+            ,random_crop=True,random_mirror=True,random_width=True,random_rotate=True,random_size=True,shuffle=True)
         input_generator=data_gen.generator()
         step=data_gen.get_max_batch_index()
         lr_changer=LearningRateScheduler(self.lr_scheduler)
-        pred_print=LambdaCallback(on_epoch_end=self.pred_print)
+        pred_test=LambdaCallback(on_epoch_end=self.pred_test)
         validate=LambdaCallback(on_epoch_end=self.validate)
         print("start train")
-        self.model.fit_generator(input_generator,steps_per_epoch=step,epochs=epoch,
-            callbacks=[lr_changer,validate,pred_print])
-        self.model.save_weights(self.model_path)
-    def lr_changer(self,epoch):
+        self.train_model.fit_generator(input_generator,steps_per_epoch=step,epochs=epoch,
+            callbacks=[lr_changer,validate,pred_test])
+        self.train_model.save_weights(self.model_path)
+    def lr_scheduler(self,epoch):
         # if epoch==0:
         #     self.origin_lr=self.lr
         # elif epoch==50:
@@ -131,13 +135,29 @@ class age_gender_classifier():
         # elif epoch<80:
         #     self.lr=self.lr*0.97
         now_lr=self.lr
-        self.model.save_weights(self.model_path)
+        self.train_model.save_weights(self.model_path)
         return now_lr
     def validate(self,epoch,logs):
         data_gen=data_generator("validate",batch_size=16)
         input_generator=data_gen.test_data()
         step=data_gen.get_max_batch_index()
-        eval = self.model.evaluate(x=input_set,y=answer_list,batch_size=8,verbose=0)
-        for index,name in enumerate(self.model.metrics_names):
+        eval = self.pred_model.evaluate_generator(input_generator,steps=step)
+        for index,name in enumerate(self.pred_model.metrics_names):
             print("%s:%.4f"%(name,eval[index]),end=" ")
         print()
+    def pred_test(self,epoch,logs,load_weight=False):
+        if load_weight:
+            self.pred_model.load_weights(self.model_path)
+        for img_name in self.pred_list:
+            img_path = './test_photo/'+img_name+'.jpg'
+            origin_x = cv2.imread(img_path,-1)
+            x=cv2.resize(origin_x,self.test_size)
+            x = preprocess_input(x)
+            x = np.expand_dims(x, axis=0)
+            preds = self.model.predict(x)
+            preds=self.decode_wh(preds)
+            if epoch>=0:
+                show_answer_list(preds,x,name=img_name+str(epoch),file_save=True,show=False,flatten=False)
+                # show_answer_list(preds,x,name=img_name+str(epoch),file_save=True,show=False,delete_by_IOU=0.5)
+            else:
+                show_answer_list(preds,x,name=img_name,file_save=True,show=False,delete_by_IOU=0.5)

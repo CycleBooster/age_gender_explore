@@ -17,7 +17,9 @@ def resnet50_preprocess_input(x,is_cv_load=True):
     x = preprocess_input(x)#used for PIL, from RGB to BGR
     return x
 def show_image(img):
-    img=img[...,::-1]#cv load in BGR, but plt want RGB
     img=img.astype("uint8")
-    plt.imshow(img)
-    plt.show()
+    cv2.imshow("test",img)
+    cv2.waitKey()
+    # img=img[...,::-1]#cv load in BGR, but plt want RGB
+    # plt.imshow(img)
+    # plt.show()
