@@ -31,7 +31,7 @@ class data_generator():
         self.__get_data_len()
         if self.data_name=="age_gender_UTK":
             self.scale_list=[0.5,0.45,0.4]
-        elif self.data_name=="age_gender_appa":
+        elif self.data_name=="age_gender_appa_val" or self.data_name=="age_gender_appa_test":
             self.scale_list=[1,0.9,0.8]
         else:
             print("error in data name")
@@ -91,17 +91,22 @@ class data_generator():
         bar.finish()
         labels=np.array(labels)
         np.save(label_path,labels)
-    def __load_appa_data(self):
-        input_name="appa"
-        label_path=self.hdf5_path+"appa_label.npy"
+    def __load_appa_data(self,type):
+        input_name="appa_"+type
+        label_path=self.hdf5_path+"appa_"+type+"_label.npy"
         if os.path.isfile(self.hdf5_path+input_name+".hdf5") and os.path.isfile(label_path):
             return 
         shared_name="gt_avg_"
         extend_name="allcategories_"
         data_name_list=[]
-        data_name_list.append("train")
-        data_name_list.append("valid")
-        data_name_list.append("test")
+        if type=="val":
+            data_name_list.append("train")
+            data_name_list.append("valid")
+        elif type=="test":
+            data_name_list.append("test")
+        else:
+            print("error in type of appa data")
+            exit()
         data_list=[]
         extend_data_list=[]
         for data_name in data_name_list:
@@ -143,10 +148,12 @@ class data_generator():
         #     self.__load_imdb_wiki_data("imdb")
         # elif self.data_name=="age_gender_wiki":
         #     self.__load_imdb_wiki_data("wiki")
-        if self.data_name=="age_gender_UTK":
+        if self.data_name=="age_gender_UTK":#used in training
             self.__load_UTK_data()
-        elif self.data_name=="age_gender_appa":
-            self.__load_appa_data()
+        elif self.data_name=="age_gender_appa_val":#used in validate
+            self.__load_appa_data("val")
+        elif self.data_name=="age_gender_appa_test":#used in validate
+            self.__load_appa_data("test")
         else:
             print("error in data name")
             exit()
@@ -156,9 +163,12 @@ class data_generator():
         if self.data_name=="age_gender_UTK":
             label_path=self.hdf5_path+"UTK_label.npy"
             input_name="UTK"
-        elif self.data_name=="age_gender_appa":
-            label_path=self.hdf5_path+"appa_label.npy"
-            input_name="appa"
+        elif self.data_name=="age_gender_appa_val":
+            label_path=self.hdf5_path+"appa_val_label.npy"
+            input_name="appa_val"
+        elif self.data_name=="age_gender_appa_test":
+            label_path=self.hdf5_path+"appa_test_label.npy"
+            input_name="appa_test"
         labels=np.load(label_path)
         if not label_only:
             reader=data_reader(input_name,self.hdf5_path)
@@ -208,15 +218,19 @@ class data_generator():
         if self.one_hot_gender:
             age=np.zeros(101)
             age[(int)(meta_age)]=1
-        gender=meta_label[1]
-        #gender=1 for male
+        else:
+            age=np.zeros(1)
+            age[0]=(int)(meta_age)
+        
+        meta_gender=meta_label[1]#gender=1 for male
+        gender=np.zeros(1)
         if self.data_name=="age_gender_UTK":
-            gender=1-(int)(gender)
+            gender[0]=1-(int)(gender)
         elif self.data_name=="age_gender_appa":
-            if gender=="male":
-                gender=1
+            if meta_gender=="male":
+                gender[0]=1
             else:
-                gender=0
+                gender[0]=0
         return gender,age
     def __get_data(self,img_buffer,label_buffer,index_buffer,buffer_start_index):
         _inputs=np.zeros((self.batch_size,)+self.output_size+(3,))
@@ -228,7 +242,7 @@ class data_generator():
         for i in range(self.batch_size):
             _inputs[i]=self.__set_input(img_buffer[index_buffer[i+buffer_start_index]])
             _out_gender[i],_out_age[i]=self.__set_label(label_buffer[index_buffer[i+buffer_start_index]])
-        return (_inputs,(_out_gender,_out_age))
+        return (_inputs,{"gender_y":_out_gender,"one_age_y":_out_age})
     def show_data(self):
         labels,imgs=self.__data_read()
         for i in range(10):
@@ -258,6 +272,8 @@ class data_generator():
                 if restart_flag:
                     start_index=0
                     restart_flag=False
+                else:
+                    start_index+=buffer_multiple*self.batch_size
     def get_max_batch_index(self):
         return (int)(self.data_len/self.batch_size)
     def generator(self):
@@ -266,12 +282,29 @@ class data_generator():
         while True:
             if self.queue.empty()==False:
                 yield self.queue.get()
-    def test_data(self,start_index=0):
+    def test_data(self):
+        buffer_multiple=10
+        labels,imgs=self.__data_read()
+        start_index=0
+        while True:
+            if start_index+buffer_multiple*self.batch_size<self.data_len:
+                end_i=buffer_multiple
+            else:
+                end_i=(int)((self.data_len-start_index)/self.batch_size)
+            img_buffer=imgs[start_index:start_index+end_i*self.batch_size]
+            img_buffer=resnet50_preprocess_input(img_buffer)
+            label_buffer=labels[start_index:start_index+end_i*self.batch_size]
+            index_buffer=[i for i in range(len(img_buffer))]
+            for i in range(end_i):
+                yield self.__get_data(img_buffer,label_buffer,index_buffer,i*self.batch_size)
+            start_index+=buffer_multiple*self.batch_size
+    def pick_data(self,start_index=0):
         labels,imgs=self.__data_read()
         index=[i for i in range(len(imgs))]
-        now_index=start_index
-        while True:
-            yield self.__get_data(imgs,labels,index,now_index)
-            now_index=now_index+self.batch_size
+        temp_data=self.__get_data(imgs,labels,index,start_index)
+        origin_data=temp_data[0]
+        preprocess_data=resnet50_preprocess_input(origin_data)
+        return preprocess_data,origin_data
+
 
         

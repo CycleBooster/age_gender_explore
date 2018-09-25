@@ -1,6 +1,7 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import keras
+import time
 import sys
 import tensorflow as tf
 import numpy as np
@@ -16,10 +17,11 @@ from data import *
 from data_stream import data_generator
 weight_decay_rate=0.0001
 class age_gender_classifier():
-    def __init__(self,model_path,batch_size=64,lr=0.0001,test_size=(64,64),model_type="one"):
+    def __init__(self,batch_size=64,lr=0.0001,test_size=(64,64),model_type="one"):
         self.age_width=101
-        self.model_path=model_path
+        self.model_path="./model/age_gender_"+model_type+".h5"
         self.lr=lr
+        self.test_size=test_size
         self.model_type=model_type
         self.batch_size=batch_size
         pretrain_model=ResNet50(input_shape=test_size+(3,),weights='imagenet',include_top=False)
@@ -32,8 +34,9 @@ class age_gender_classifier():
             ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
         gender_y=Dense(1,activation="sigmoid"
             ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="gender_y")(temp_y)
-        one_age_y=Dense(1,activation="sigmoid"
-            ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="one_age_y")(temp_y)
+        temp_one_age_y=Dense(1,activation="sigmoid"
+            ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
+        one_age_y=Lambda(lambda x:100*x,name="one_age_y")(temp_one_age_y)
         softmax_age_y=Dense(self.age_width,activation="softmax"
             ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="soft_age_y")(temp_y)
         out_age=Lambda(self.weighted_average,name="out_age_y")(softmax_age_y)
@@ -54,7 +57,7 @@ class age_gender_classifier():
             self.pred_model=self.train_model
             self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"out_age_y":self.age_loss_R}
                 ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
-        self.train_model.summary()
+        # self.train_model.summary()
     def weighted_average(self,x):
         number_tensor=tf.expand_dims(tf.range(0,self.age_width,1),axis=0)
         number_tensor=tf.cast(number_tensor,tf.float32)
@@ -109,6 +112,7 @@ class age_gender_classifier():
         x = resnet50_preprocess_input(x)
         x = np.expand_dims(x, axis=0)
         preds = self.pred_model.predict(x)
+        show_result([origin_x],preds,save=True,show=True)
     def train(self,epoch,keep_train=False):
         if keep_train:
             self.train_model.load_weights(self.model_path)
@@ -137,27 +141,34 @@ class age_gender_classifier():
         now_lr=self.lr
         self.train_model.save_weights(self.model_path)
         return now_lr
-    def validate(self,epoch,logs):
-        data_gen=data_generator("validate",batch_size=16)
+    def validate(self,epoch,logs,load_weight=False):
+        if load_weight:
+            self.train_model.load_weights(self.model_path)
+        if self.model_type=="soft":
+            one_hot_flag=True
+        else:
+            one_hot_flag=False
+        data_gen=data_generator("age_gender_appa_val",batch_size=16,one_hot_gender=one_hot_flag)
         input_generator=data_gen.test_data()
         step=data_gen.get_max_batch_index()
-        eval = self.pred_model.evaluate_generator(input_generator,steps=step)
+        eval = self.train_model.evaluate_generator(input_generator,steps=step)
         for index,name in enumerate(self.pred_model.metrics_names):
             print("%s:%.4f"%(name,eval[index]),end=" ")
         print()
     def pred_test(self,epoch,logs,load_weight=False):
         if load_weight:
-            self.pred_model.load_weights(self.model_path)
-        for img_name in self.pred_list:
-            img_path = './test_photo/'+img_name+'.jpg'
-            origin_x = cv2.imread(img_path,-1)
-            x=cv2.resize(origin_x,self.test_size)
-            x = preprocess_input(x)
-            x = np.expand_dims(x, axis=0)
-            preds = self.model.predict(x)
-            preds=self.decode_wh(preds)
-            if epoch>=0:
-                show_answer_list(preds,x,name=img_name+str(epoch),file_save=True,show=False,flatten=False)
-                # show_answer_list(preds,x,name=img_name+str(epoch),file_save=True,show=False,delete_by_IOU=0.5)
-            else:
-                show_answer_list(preds,x,name=img_name,file_save=True,show=False,delete_by_IOU=0.5)
+            self.train_model.load_weights(self.model_path)
+        if self.model_type=="soft":
+            one_hot_flag=True
+        else:
+            one_hot_flag=False
+        data_gen=data_generator("age_gender_appa_test",batch_size=64,one_hot_gender=one_hot_flag)#batch_size means number of tested photos
+        input_generator=data_gen.test_data()
+        for i in range(2):
+            temp=time.time()
+            # preprocess_data,origin_data=data_gen.pick_data(start_index=0)
+            # preds = self.pred_model.predict(preprocess_data)
+            (imgs,dict)=next(input_generator)
+            preds = self.pred_model.predict(imgs)
+            print(time.time()-temp)
+            # show_result(origin_data,preds,save=True,show=False)
