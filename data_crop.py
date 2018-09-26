@@ -33,7 +33,13 @@ def paste_face(img,face_coor,paste_size):
     background[target_y_start:target_y_end,target_x_start:target_x_end]=img[crop_y_start:crop_y_end,crop_x_start:crop_x_end]
     out_face=cv2.resize(background,paste_size)
     return out_face
-
+def check_name(img_name):
+    check_split=img_name.split(".")
+    if check_split[-1]!="jpg":
+        return False
+    if check_split[-2]=="jpg_face":
+        return False
+    return True
 def crop_face(data_path):
     save_path="./test_photo/crop/"
     if not os.path.isdir(save_path):
@@ -48,6 +54,10 @@ def crop_face(data_path):
         img_path=data_path+img_name
         img=cv2.imread(img_path,1)
         time_list.append(time.time())
+        if not check_name(img_name):
+            continue
+        # cv2.imshow("Face Detection", img)
+        # cv2.waitKey(0)
         detector = dlib.get_frontal_face_detector()
         # face_rects = detector(img, 0)
         face_rects, scores, idx = detector.run(img, 0, -0.1)
@@ -60,14 +70,33 @@ def crop_face(data_path):
             time_list.append(time.time())
             # for i in range(len(time_list)-1):
             #     print(time_list[i+1]-time_list[i])
-            # cv2.imshow("Face Detection", face_img)
-            # cv2.waitKey(0)
-            try:
-                cv2.imwrite(save_path+img_name,face_img)
-            except:
-                print()
-                print(img_name)
+            cv2.imshow("Face Detection", face_img)
+            cv2.waitKey(0)
+            # try:
+            #     cv2.imwrite(save_path+img_name,face_img)
+            # except:
+            #     print()
+            #     print(img_name)
     bar.finish()
-
+def try_read(data_path):
+    img_name_list=os.listdir(data_path)
+    data_len=len(img_name_list)
+    bar = Bar('Processing', max=data_len,fill='-')
+    for img_name in img_name_list:
+        bar.next()
+        img_path=data_path+img_name
+        img=cv2.imread(img_path,1)
+    bar.finish()
+def find_lost(origin_path,target_path):#only work in used crop_face in the same PC
+    origin_name_list=os.listdir(origin_path)
+    target_name_list=os.listdir(target_path)
+    origin_index=0
+    for target_name in target_name_list:
+        while origin_name_list[origin_index]!=target_name:
+            print(origin_name_list[origin_index])
+            origin_index+=1
+        origin_index+=1
 if __name__ == '__main__':
-    crop_face(data_path=".\\data\\part2\\")
+    crop_face(data_path=".\\data\\appa-real\\train\\")
+    # try_read(data_path=".\\test_photo\\crop\\")
+    # find_lost(".\\data\\part3\\",".\\test_photo\\crop_part3\\")
