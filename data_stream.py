@@ -196,7 +196,6 @@ class data_generator():
         if self.random_size:
             random_size_num=random.randint(0,2)
             scale=self.scale_list[random_size_num]
-            print(scale)
         else:
             scale=self.scale_list[0]
         M = cv2.getRotationMatrix2D((w/2,h/2), angle, scale)
@@ -225,7 +224,7 @@ class data_generator():
         meta_gender=meta_label[1]#gender=1 for male
         gender=np.zeros(1)
         if self.data_name=="age_gender_UTK":
-            gender[0]=1-(int)(gender)
+            gender[0]=1-(int)(meta_gender)
         elif self.data_name=="age_gender_appa":
             if meta_gender=="male":
                 gender[0]=1
@@ -246,7 +245,7 @@ class data_generator():
     def show_data(self):
         labels,imgs=self.__data_read()
         for i in range(10):
-            print(labels[i])
+            print(self.__set_label(labels[i]))
             test_img=self.__set_input(imgs[i])
             show_image(test_img)
     def data_process(self):
@@ -256,7 +255,7 @@ class data_generator():
         restart_flag=False
         while 1:
             if self.queue.qsize()<3*buffer_multiple:
-                if start_index+buffer_multiple*self.batch_size<self.data_len:
+                if start_index+buffer_multiple*self.batch_size<=self.data_len:
                     end_i=buffer_multiple
                 else:
                     end_i=(int)((self.data_len-start_index)/self.batch_size)
@@ -282,29 +281,30 @@ class data_generator():
         while True:
             if self.queue.empty()==False:
                 yield self.queue.get()
-    def test_data(self):
+    def test_data(self,start_index=0,pick=False):
         buffer_multiple=10
         labels,imgs=self.__data_read()
-        start_index=0
+        end_flag=False
         while True:
-            if start_index+buffer_multiple*self.batch_size<self.data_len:
+            if start_index+buffer_multiple*self.batch_size<=self.data_len:
                 end_i=buffer_multiple
             else:
                 end_i=(int)((self.data_len-start_index)/self.batch_size)
+                end_flag=True
             img_buffer=imgs[start_index:start_index+end_i*self.batch_size]
             img_buffer=resnet50_preprocess_input(img_buffer)
             label_buffer=labels[start_index:start_index+end_i*self.batch_size]
             index_buffer=[i for i in range(len(img_buffer))]
             for i in range(end_i):
-                yield self.__get_data(img_buffer,label_buffer,index_buffer,i*self.batch_size)
+                if pick:
+                    (out_imgs,dict)=self.__get_data(img_buffer,label_buffer,index_buffer,i*self.batch_size)
+                    origin_imgs=imgs[start_index:start_index+self.batch_size]
+                    yield (origin_imgs,out_imgs)
+                else:
+                    yield self.__get_data(img_buffer,label_buffer,index_buffer,i*self.batch_size)
             start_index+=buffer_multiple*self.batch_size
-    def pick_data(self,start_index=0):
-        labels,imgs=self.__data_read()
-        index=[i for i in range(len(imgs))]
-        temp_data=self.__get_data(imgs,labels,index,start_index)
-        origin_data=temp_data[0]
-        preprocess_data=resnet50_preprocess_input(origin_data)
-        return preprocess_data,origin_data
+            if end_flag:
+                break
 
 
         

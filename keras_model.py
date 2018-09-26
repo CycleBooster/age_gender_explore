@@ -15,7 +15,7 @@ from keras.callbacks import LearningRateScheduler,LambdaCallback
 from keras import regularizers
 from data import *
 from data_stream import data_generator
-weight_decay_rate=0.0001
+weight_decay_rate=0.001
 class age_gender_classifier():
     def __init__(self,batch_size=64,lr=0.0001,test_size=(64,64),model_type="one"):
         self.age_width=101
@@ -26,7 +26,7 @@ class age_gender_classifier():
         self.batch_size=batch_size
         pretrain_model=ResNet50(input_shape=test_size+(3,),weights='imagenet',include_top=False)
         x=pretrain_model.input
-        pretrain_output=pretrain_model.output
+        pretrain_output=pretrain_model.get_layer("activation_22").output
         pretrain_output=Flatten()(pretrain_output)
         temp_y=Dense(256,activation="relu"
             ,kernel_regularizer=regularizers.l2(weight_decay_rate))(pretrain_output)
@@ -64,7 +64,10 @@ class age_gender_classifier():
         y=tf.reduce_sum(number_tensor*x)
         return y
     def age_loss_R(self,y_true,y_pred):
-        loss=(y_true-y_pred)**2
+        if self.model_type=="one":
+            loss=((y_true-y_pred)/100)**2
+        else:
+            loss=(y_true-y_pred)**2
         loss=tf.reduce_mean(loss)
         return loss
     def age_loss_C(self,y_true,y_pred):
@@ -139,6 +142,8 @@ class age_gender_classifier():
         # elif epoch<80:
         #     self.lr=self.lr*0.97
         now_lr=self.lr
+        if not os.path.isdir("./model/"):
+            os.mkdir("./model/")
         self.train_model.save_weights(self.model_path)
         return now_lr
     def validate(self,epoch,logs,load_weight=False):
@@ -148,11 +153,11 @@ class age_gender_classifier():
             one_hot_flag=True
         else:
             one_hot_flag=False
-        data_gen=data_generator("age_gender_appa_val",batch_size=16,one_hot_gender=one_hot_flag)
+        data_gen=data_generator("age_gender_appa_val",batch_size=64,one_hot_gender=one_hot_flag)
         input_generator=data_gen.test_data()
         step=data_gen.get_max_batch_index()
-        eval = self.train_model.evaluate_generator(input_generator,steps=step)
-        for index,name in enumerate(self.pred_model.metrics_names):
+        eval = self.train_model.evaluate_generator(input_generator,steps=step,verbose=0)
+        for index,name in enumerate(self.train_model.metrics_names):
             print("%s:%.4f"%(name,eval[index]),end=" ")
         print()
     def pred_test(self,epoch,logs,load_weight=False):
@@ -162,13 +167,11 @@ class age_gender_classifier():
             one_hot_flag=True
         else:
             one_hot_flag=False
-        data_gen=data_generator("age_gender_appa_test",batch_size=64,one_hot_gender=one_hot_flag)#batch_size means number of tested photos
-        input_generator=data_gen.test_data()
+        data_gen=data_generator("age_gender_appa_test",batch_size=8,one_hot_gender=one_hot_flag)#batch_size means number of tested photos
+        input_generator=data_gen.test_data(pick=True)
         for i in range(2):
-            temp=time.time()
-            # preprocess_data,origin_data=data_gen.pick_data(start_index=0)
-            # preds = self.pred_model.predict(preprocess_data)
-            (imgs,dict)=next(input_generator)
-            preds = self.pred_model.predict(imgs)
-            print(time.time()-temp)
-            # show_result(origin_data,preds,save=True,show=False)
+            (origin_imgs,out_imgs)=next(input_generator)
+            start_t=time.time()
+            preds = self.pred_model.predict(out_imgs)
+            print(time.time()-start_t)
+            show_result(origin_imgs,preds,save=True,show=False)
