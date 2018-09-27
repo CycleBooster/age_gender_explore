@@ -16,14 +16,14 @@ def resnet50_preprocess_input(x,is_cv_load=True):
         x=x[...,::-1]
     x = preprocess_input(x)#used for PIL, from RGB to BGR
     return x
-def show_image(img):
+def show_image(img,name="test"):
     img=img.astype("uint8")
-    cv2.imshow("test",img)
+    cv2.imshow(name,img)
     cv2.waitKey()
     # img=img[...,::-1]#cv load in BGR, but plt want RGB
     # plt.imshow(img)
     # plt.show()
-def show_result(imgs,labels,save=False,show=False,name=None,out_size=(320,320)):
+def show_result(imgs,labels,save=False,show=True,name=None,out_size=(320,320)):
     save_path="./test_photo/temp_save/"
     if not os.path.isdir(save_path):
         os.mkdir(save_path)

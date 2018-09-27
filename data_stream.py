@@ -13,29 +13,22 @@ from dataset import data_writer,data_reader
 from data import *
 class data_generator():
     def __init__(self,data_name,batch_size=32,one_hot_gender=True
-    ,random_crop=False,random_mirror=False,random_width=False,random_rotate=False,random_size=False,shuffle=False):
+    ,random_shift=False,random_mirror=False,random_rotate=False,random_scale=False,shuffle=False):
         self.output_size=(64,64)
         self.data_size=(128,128)#width and height must be the same to avoid resize and dataset get error
         # self.crop_size_list=[]#set after get data name
         self.data_name=data_name
         self.batch_size=batch_size
         self.one_hot_gender=one_hot_gender
-        self.random_crop=random_crop
+        self.random_shift=random_shift
         self.random_mirror=random_mirror
-        self.random_width=random_width
         self.random_rotate=random_rotate
-        self.random_size=random_size
+        self.random_scale=random_scale
         self.shuffle=shuffle
         self.queue= Queue()
         self.__build_data()
         self.__get_data_len()
-        if self.data_name=="age_gender_UTK":
-            self.scale_list=[0.5,0.45,0.4]
-        elif self.data_name=="age_gender_appa_val" or self.data_name=="age_gender_appa_test":
-            self.scale_list=[1,0.9,0.8]
-        else:
-            print("error in data name")
-            exit()
+        self.scale_list=[1,0.9,0.8]
     def __get_imdb_year(self,dob):
         birth=datetime.fromordinal(max(int(dob) - 366, 1))
         if birth.month<7:
@@ -65,7 +58,7 @@ class data_generator():
         label_path=self.hdf5_path+"UTK_label.npy"
         if os.path.isfile(self.hdf5_path+input_name+".hdf5") and os.path.isfile(label_path):
             return 
-        data_path="./data/UTKFace/"
+        data_path="./data/UTKFace/crop/"
         img_name_list=os.listdir(data_path)
         data_len=len(img_name_list)
         print("data length is "+str(data_len))
@@ -73,6 +66,7 @@ class data_generator():
         writer=data_writer(input_name,self.hdf5_path)
         writer.build_dataset("input",self.data_size+(3,))
         bar = Bar('Processing', max=data_len,fill='-')
+        np.random.shuffle(img_name_list)
         for img_name in img_name_list:
             img_path=data_path+img_name
             try:
@@ -80,9 +74,13 @@ class data_generator():
             except:#some image get error in name
                 bar.next()
                 continue
-            age=int(age)
-            gender=int(gender)
-            race=int(race)
+            try:
+                age=int(age)
+                gender=int(gender)
+                race=int(race)
+            except:
+                print(img_name)
+                exit()
             labels.append([age,gender,race])
             img=cv2.imread(img_path,1)
             img=cv2.resize(img,self.data_size)
@@ -125,10 +123,19 @@ class data_generator():
         labels=[]
         bar = Bar('Processing', max=data_len,fill='-')
         for folder_index,sub_data_list in enumerate(data_list):
-            for index,data in enumerate(sub_data_list):
+            shuffle_index=[i for i in range(len(sub_data_list))]
+            np.random.shuffle(shuffle_index)
+            for i in range(len(sub_data_list)):
+                index=shuffle_index[i]
+                data=sub_data_list[index]
+            # for index,data in enumerate(sub_data_list):
+                bar.next()
                 img_name=data['file_name']
-                img_number,img_form=img_name.split(".")
-                img_path="./data/appa-real/"+data_name_list[folder_index]+"/"+img_number+".jpg_face."+img_form
+                # img_number,img_form=img_name.split(".")
+                # img_path="./data/appa-real/"+data_name_list[folder_index]+"/"+img_number+".jpg_face."+img_form
+                img_path="./data/appa-real/crop_"+data_name_list[folder_index]+"/"+img_name
+                if not os.path.isfile(img_path):
+                    continue
                 real_age=data['real_age']
                 gender=extend_data_list[folder_index][index]['gender']
                 race=extend_data_list[folder_index][index]['race']
@@ -136,7 +143,6 @@ class data_generator():
                 img=cv2.imread(img_path,1)
                 img=cv2.resize(img,self.data_size)
                 writer.write("input",img)
-                bar.next()
         bar.finish()
         labels=np.array(labels)
         np.save(label_path,labels)
@@ -178,39 +184,30 @@ class data_generator():
             return labels
 
     def __set_input(self,img):
-        random_num=random.randint(0,29)
+        random_num=random.randint(0,5)
         temp_img=np.array(img,copy=True)
         (h,w)=temp_img.shape[:2]
         if self.random_mirror and (random_num%2)==0:
             temp_img=cv2.flip(temp_img,1)
-        if self.random_width:#3
-            if random_num%3==1:#wider
-                temp_img=cv2.resize(temp_img,(w,(int)(h*0.9)))
-            elif random_num%3==2:#higher
-                temp_img=cv2.resize(temp_img,((int)(w*0.9),h))
-            (h,w)=temp_img.shape[:2]
-        if self.random_rotate:#5
-            angle=(random_num%5-2)*10
+        if self.random_shift:
+            crop_random_num=random.randint(0,8)
+            offset_para=10
+            w_offset=((int)(crop_random_num/3)-1)*offset_para
+            h_offset=(crop_random_num%3-1)*offset_para
+            shift_M=np.float32([[1, 0, w_offset], [0, 1, h_offset]])
+            temp_img = cv2.warpAffine(temp_img, shift_M, (w, h))
+        if self.random_rotate:#3
+            angle=(random_num%3-1)*10
         else:
             angle=0
-        if self.random_size:
-            random_size_num=random.randint(0,2)
-            scale=self.scale_list[random_size_num]
+        if self.random_scale:
+            random_scale_num=random.randint(0,2)
+            scale=self.scale_list[random_scale_num]
         else:
             scale=self.scale_list[0]
         M = cv2.getRotationMatrix2D((w/2,h/2), angle, scale)
         temp_img = cv2.warpAffine(temp_img, M, (w, h))
-        if self.random_crop:
-            crop_random_num=random.randint(0,8)
-            offset_para=3
-            w_offset=((int)(crop_random_num/3)-1)*offset_para
-            h_offset=(crop_random_num%3-1)*offset_para
-        else:
-            w_offset=0
-            h_offset=0
-        h_start=(int)(h/2+h_offset-self.output_size[0]/2)
-        w_start=(int)(w/2+w_offset-self.output_size[1]/2)
-        out_img=temp_img[h_start:h_start+self.output_size[0],w_start:w_start+self.output_size[1],:]
+        out_img=cv2.resize(temp_img,self.output_size)
         return out_img
     def __set_label(self,meta_label):#decode label
         meta_age=meta_label[0]
@@ -225,11 +222,16 @@ class data_generator():
         gender=np.zeros(1)
         if self.data_name=="age_gender_UTK":
             gender[0]=1-(int)(meta_gender)
-        elif self.data_name=="age_gender_appa":
+        elif self.data_name=="age_gender_appa_val" or self.data_name=="age_gender_appa_test":
             if meta_gender=="male":
                 gender[0]=1
-            else:
+            elif meta_gender=="female":
                 gender[0]=0
+            else:
+                print("??")
+        else:
+            print("error in data name")
+            exit()
         return gender,age
     def __get_data(self,img_buffer,label_buffer,index_buffer,buffer_start_index):
         _inputs=np.zeros((self.batch_size,)+self.output_size+(3,))

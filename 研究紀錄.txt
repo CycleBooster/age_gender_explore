@@ -1,0 +1,3 @@
+imdb dataset的準確度極差，廢棄
+其餘dataset的人頭重新切出適合的位置，在data_crop.py中處理
+另外為了讓不同年齡在dataset的順序均勻分布(原本是按年齡排，且shuffle只能局部運作)，製作dataset時需要另外處理

@@ -26,7 +26,8 @@ class age_gender_classifier():
         self.batch_size=batch_size
         pretrain_model=ResNet50(input_shape=test_size+(3,),weights='imagenet',include_top=False)
         x=pretrain_model.input
-        pretrain_output=pretrain_model.get_layer("activation_22").output
+        # pretrain_output=pretrain_model.get_layer("activation_22").output
+        pretrain_output=pretrain_model.get_layer("activation_40").output
         pretrain_output=Flatten()(pretrain_output)
         temp_y=Dense(256,activation="relu"
             ,kernel_regularizer=regularizers.l2(weight_decay_rate))(pretrain_output)
@@ -124,7 +125,7 @@ class age_gender_classifier():
         else:
             one_hot_flag=False
         data_gen=data_generator("age_gender_UTK",batch_size=self.batch_size,one_hot_gender=one_hot_flag
-            ,random_crop=True,random_mirror=True,random_width=True,random_rotate=True,random_size=True,shuffle=True)
+            ,random_shift=True,random_mirror=True,random_rotate=True,random_scale=True,shuffle=True)
         input_generator=data_gen.generator()
         step=data_gen.get_max_batch_index()
         lr_changer=LearningRateScheduler(self.lr_scheduler)
@@ -167,11 +168,11 @@ class age_gender_classifier():
             one_hot_flag=True
         else:
             one_hot_flag=False
-        data_gen=data_generator("age_gender_appa_test",batch_size=8,one_hot_gender=one_hot_flag)#batch_size means number of tested photos
+        data_gen=data_generator("age_gender_appa_test",batch_size=32,one_hot_gender=one_hot_flag)#batch_size means number of tested photos
         input_generator=data_gen.test_data(pick=True)
-        for i in range(2):
-            (origin_imgs,out_imgs)=next(input_generator)
-            start_t=time.time()
-            preds = self.pred_model.predict(out_imgs)
-            print(time.time()-start_t)
-            show_result(origin_imgs,preds,save=True,show=False)
+        # for i in range(2):
+        (origin_imgs,out_imgs)=next(input_generator)
+        # start_t=time.time()
+        preds = self.pred_model.predict(out_imgs)
+        # print(time.time()-start_t)
+        show_result(origin_imgs,preds,save=True,show=False)
