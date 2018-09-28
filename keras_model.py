@@ -7,7 +7,7 @@ import tensorflow as tf
 import numpy as np
 import math
 from keras.applications import ResNet50
-from keras.layers import Conv2D,Dense,Flatten,Activation,Lambda,AveragePooling2D
+from keras.layers import Conv2D,Dense,Flatten,Activation,Lambda,AveragePooling2D,UpSampling2D,Add
 from keras.optimizers import Adam
 from keras.models import Model
 from keras.losses import categorical_crossentropy,binary_crossentropy
@@ -28,8 +28,9 @@ class age_gender_classifier():
         # pretrain_model=ResNet50(weights='imagenet',include_top=True)
         x=pretrain_model.input
         # pretrain_output=pretrain_model.get_layer("activation_22").output
-        pretrain_output=pretrain_model.get_layer("activation_40").output
+        # pretrain_output=pretrain_model.get_layer("activation_40").output
         # pretrain_output=pretrain_model.get_layer("activation_49").output
+        pretrain_output=self.pyramid_out_layer(pretrain_model,["activation_49","activation_40","activation_22"])
         pool_size=((int)(test_size[0]/32),(int)(test_size[1]/32))
         # pretrain_model.summary()
         # temp_y=AveragePooling2D(pool_size)(pretrain_output)
@@ -39,49 +40,51 @@ class age_gender_classifier():
         # temp_y=Dense(256,activation="relu"
         #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
 
-        # temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
-        #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(pretrain_output)
-        # temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
-        #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
-        # temp_y=AveragePooling2D(pool_size)(temp_y)
-        # temp_y=Flatten()(temp_y)
-
         temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
             ,kernel_regularizer=regularizers.l2(weight_decay_rate))(pretrain_output)
         temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
             ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
-        temp_gender_y=Conv2D(2,[1,1],padding='same'
-            ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
-        med_gender_y=Lambda(self.average_layer,name="med_gen_y")(temp_gender_y)
-        gender_y=Lambda(self.soft_layer,name="gender_y")(temp_gender_y)
-        temp_one_age_y=Conv2D(2,[1,1],padding='same'
-            ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
-        temp_med_one_age_y=Lambda(self.average_layer)(temp_one_age_y)
-        med_one_age_y=Lambda(lambda x:100*x,name="med_age_y")(temp_med_one_age_y)
-        temp_one_age_y=Lambda(self.soft_layer)(temp_one_age_y)
-        one_age_y=Lambda(lambda x:100*x,name="one_age_y")(temp_one_age_y)
+        temp_y=AveragePooling2D(pool_size)(temp_y)
+        temp_y=Flatten()(temp_y)
 
-        # gender_y=Dense(1,activation="sigmoid"
-        #     ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="gender_y")(temp_y)
-        # temp_one_age_y=Dense(1,activation="sigmoid"
+        
+        
+        # temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
+        #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(pretrain_output)
+        # temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
         #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
+        # temp_gender_y=Conv2D(2,[1,1],padding='same'
+        #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
+        # med_gender_y=Lambda(self.average_layer,name="med_gen_y")(temp_gender_y)
+        # gender_y=Lambda(self.soft_layer,name="gender_y")(temp_gender_y)
+        # temp_one_age_y=Conv2D(2,[1,1],padding='same'
+        #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
+        # temp_med_one_age_y=Lambda(self.average_layer)(temp_one_age_y)
+        # med_one_age_y=Lambda(lambda x:100*x,name="med_age_y")(temp_med_one_age_y)
+        # temp_one_age_y=Lambda(self.soft_layer)(temp_one_age_y)
         # one_age_y=Lambda(lambda x:100*x,name="one_age_y")(temp_one_age_y)
-        # softmax_age_y=Dense(self.age_width,activation="softmax"
-        #     ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="soft_age_y")(temp_y)
-        # out_age=Lambda(self.weighted_average,name="out_age_y")(softmax_age_y)
+
+        gender_y=Dense(1,activation="sigmoid"
+            ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="gender_y")(temp_y)
+        temp_one_age_y=Dense(1,activation="sigmoid"
+            ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
+        one_age_y=Lambda(lambda x:100*x,name="one_age_y")(temp_one_age_y)
+        softmax_age_y=Dense(self.age_width,activation="softmax"
+            ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="soft_age_y")(temp_y)
+        out_age=Lambda(self.weighted_average,name="out_age_y")(softmax_age_y)
 
         self.optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
         if model_type=="one":
-            # self.train_model=Model(inputs=x,outputs=[gender_y,one_age_y])
-            # self.pred_model=Model(inputs=x,outputs=[gender_y,one_age_y])
-            self.train_model=Model(inputs=x,outputs=[gender_y,med_gender_y,one_age_y,med_one_age_y])
-            self.pred_model=Model(inputs=x,outputs=[med_gender_y,med_one_age_y])
-            # self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"one_age_y":self.age_loss_R}
-            #     ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
+            self.train_model=Model(inputs=x,outputs=[gender_y,one_age_y])
+            self.pred_model=Model(inputs=x,outputs=[gender_y,one_age_y])
+            # self.train_model=Model(inputs=x,outputs=[gender_y,med_gender_y,one_age_y,med_one_age_y])
+            # self.pred_model=Model(inputs=x,outputs=[med_gender_y,med_one_age_y])
+            self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"one_age_y":self.age_loss_R}
+                ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
             # self.train_model.compile(optimizer=self.optimizer,loss={"med_gen_y":self.gender_loss,"med_age_y":self.age_loss_R}
             #     ,metrics={"med_gen_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"med_age_y":self.MAE_R})
-            self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"med_gen_y":self.gender_loss,"one_age_y":self.age_loss_R,"med_age_y":self.age_loss_R}
-                ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
+            # self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"med_gen_y":self.gender_loss,"one_age_y":self.age_loss_R,"med_age_y":self.age_loss_R}
+            #     ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
         # if model_type=="soft":
         #     self.train_model=Model(inputs=x,outputs=[gender_y,softmax_age_y])
         #     self.pred_model=Model(inputs=x,outputs=[gender_y,out_age])
@@ -93,6 +96,21 @@ class age_gender_classifier():
         #     self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"out_age_y":self.age_loss_R}
         #         ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
         # self.train_model.summary()
+    def pyramid_out_layer(self,model,layer_name_list):
+        last_layer=None
+        for layer_name in layer_name_list:
+            now_layer=model.get_layer(layer_name).output
+            now_layer=Conv2D(256,[1,1],padding='same'
+                ,kernel_regularizer=regularizers.l2(weight_decay_rate))(now_layer)
+            if last_layer!=None:
+                temp_last_layer=UpSampling2D(size=[2,2])(last_layer)
+                last_layer=Add()([now_layer,temp_last_layer])
+            else:
+                last_layer=now_layer
+        last_layer=Conv2D(256,[3,3],padding='same'
+                ,kernel_regularizer=regularizers.l2(weight_decay_rate))(last_layer)
+        return last_layer
+
     def soft_layer(self,x):
         conf,value=tf.split(x,[1,tf.shape(x)[-1]-1],axis=-1)
         value=tf.sigmoid(value)
