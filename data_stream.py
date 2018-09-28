@@ -243,7 +243,9 @@ class data_generator():
         for i in range(self.batch_size):
             _inputs[i]=self.__set_input(img_buffer[index_buffer[i+buffer_start_index]])
             _out_gender[i],_out_age[i]=self.__set_label(label_buffer[index_buffer[i+buffer_start_index]])
-        return (_inputs,{"gender_y":_out_gender,"one_age_y":_out_age})
+        # return (_inputs,{"gender_y":_out_gender,"one_age_y":_out_age})
+        return (_inputs,{"gender_y":_out_gender,"med_gen_y":_out_gender,"one_age_y":_out_age,"med_age_y":_out_age})
+        # return (_inputs,{"med_gen_y":_out_gender,"med_age_y":_out_age})
     def show_data(self):
         labels,imgs=self.__data_read()
         for i in range(10):
