@@ -28,23 +28,15 @@ class age_gender_classifier():
         # pretrain_model=ResNet50(weights='imagenet',include_top=True)
         x=pretrain_model.input
         # pretrain_output=pretrain_model.get_layer("activation_22").output
-        # pretrain_output=pretrain_model.get_layer("activation_40").output
+        pretrain_output=pretrain_model.get_layer("activation_40").output
         # pretrain_output=pretrain_model.get_layer("activation_49").output
-        pretrain_output=self.pyramid_out_layer(pretrain_model,["activation_49","activation_40","activation_22"])
-        pool_size=((int)(test_size[0]/32),(int)(test_size[1]/32))
-        # pretrain_model.summary()
-        # temp_y=AveragePooling2D(pool_size)(pretrain_output)
-        # temp_y=Flatten()(temp_y)
-        # temp_y=Dense(256,activation="relu"
-        #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
-        # temp_y=Dense(256,activation="relu"
-        #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
+        # pretrain_output=self.pyramid_out_layer(pretrain_model,["activation_40","activation_22"])
 
         temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
             ,kernel_regularizer=regularizers.l2(weight_decay_rate))(pretrain_output)
         temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
             ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
-        temp_y=AveragePooling2D(pool_size)(temp_y)
+        temp_y=Lambda(self.PoolingTotal,name="total_pool")(temp_y)
         temp_y=Flatten()(temp_y)
 
         
@@ -96,6 +88,11 @@ class age_gender_classifier():
         #     self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"out_age_y":self.age_loss_R}
         #         ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
         # self.train_model.summary()
+    def PoolingTotal(self,x):
+        y=tf.reduce_mean(x,axis=[1,2])
+        y=tf.expand_dims(y,axis=1)
+        y=tf.expand_dims(y,axis=1)
+        return y
     def pyramid_out_layer(self,model,layer_name_list):
         last_layer=None
         for layer_name in layer_name_list:
