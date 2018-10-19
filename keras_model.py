@@ -32,15 +32,23 @@ class age_gender_classifier():
         # pretrain_output=pretrain_model.get_layer("activation_49").output
         # pretrain_output=self.pyramid_out_layer(pretrain_model,["activation_40","activation_22"])
 
+        #total pool ver
         temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
             ,kernel_regularizer=regularizers.l2(weight_decay_rate))(pretrain_output)
         temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
             ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
         temp_y=Lambda(self.PoolingTotal,name="total_pool")(temp_y)
         temp_y=Flatten()(temp_y)
-
+        gender_y=Dense(1,activation="sigmoid"
+            ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="gender_y")(temp_y)
+        temp_one_age_y=Dense(1,activation="sigmoid"
+            ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
+        one_age_y=Lambda(lambda x:100*x,name="one_age_y")(temp_one_age_y)
+        softmax_age_y=Dense(self.age_width
+            ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="soft_age_y")(temp_y)
+        out_age=Lambda(self.weighted_average,name="out_age_y")(softmax_age_y)
         
-        
+        #confidence ver
         # temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
         #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(pretrain_output)
         # temp_y=Conv2D(256,[1,1],activation="relu",padding='same'
@@ -48,45 +56,41 @@ class age_gender_classifier():
         # temp_gender_y=Conv2D(2,[1,1],padding='same'
         #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
         # med_gender_y=Lambda(self.average_layer,name="med_gen_y")(temp_gender_y)
-        # gender_y=Lambda(self.soft_layer,name="gender_y")(temp_gender_y)
-        # temp_one_age_y=Conv2D(2,[1,1],padding='same'
+        # gender_y=Lambda(self.max_layer,name="gender_y")(temp_gender_y)
+        # temp_age_y=Conv2D(2,[1,1],padding='same'
         #     ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
-        # temp_med_one_age_y=Lambda(self.average_layer)(temp_one_age_y)
+        # temp_med_one_age_y=Lambda(self.average_layer)(temp_age_y)
         # med_one_age_y=Lambda(lambda x:100*x,name="med_age_y")(temp_med_one_age_y)
-        # temp_one_age_y=Lambda(self.soft_layer)(temp_one_age_y)
+        # temp_one_age_y=Lambda(self.max_layer)(temp_age_y)
         # one_age_y=Lambda(lambda x:100*x,name="one_age_y")(temp_one_age_y)
 
-        gender_y=Dense(1,activation="sigmoid"
-            ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="gender_y")(temp_y)
-        temp_one_age_y=Dense(1,activation="sigmoid"
-            ,kernel_regularizer=regularizers.l2(weight_decay_rate))(temp_y)
-        one_age_y=Lambda(lambda x:100*x,name="one_age_y")(temp_one_age_y)
-        softmax_age_y=Dense(self.age_width,activation="softmax"
-            ,kernel_regularizer=regularizers.l2(weight_decay_rate),name="soft_age_y")(temp_y)
-        out_age=Lambda(self.weighted_average,name="out_age_y")(softmax_age_y)
 
         self.optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
         if model_type=="one":
             self.train_model=Model(inputs=x,outputs=[gender_y,one_age_y])
             self.pred_model=Model(inputs=x,outputs=[gender_y,one_age_y])
-            # self.train_model=Model(inputs=x,outputs=[gender_y,med_gender_y,one_age_y,med_one_age_y])
-            # self.pred_model=Model(inputs=x,outputs=[med_gender_y,med_one_age_y])
+            # self.train_model=Model(inputs=x,outputs=gender_y)
+            # self.pred_model=Model(inputs=x,outputs=gender_y)
+            # self.train_model=Model(inputs=x,outputs=[temp_gender_y,temp_age_y])
+            # self.pred_model=Model(inputs=x,outputs=[gender_y,one_age_y])
             self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"one_age_y":self.age_loss_R}
                 ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
+            # self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss}
+            #     ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7]})
             # self.train_model.compile(optimizer=self.optimizer,loss={"med_gen_y":self.gender_loss,"med_age_y":self.age_loss_R}
             #     ,metrics={"med_gen_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"med_age_y":self.MAE_R})
             # self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"med_gen_y":self.gender_loss,"one_age_y":self.age_loss_R,"med_age_y":self.age_loss_R}
             #     ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
-        # if model_type=="soft":
-        #     self.train_model=Model(inputs=x,outputs=[gender_y,softmax_age_y])
-        #     self.pred_model=Model(inputs=x,outputs=[gender_y,out_age])
-        #     self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"soft_age_y":self.age_loss_C}
-        #         ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_C})
-        # if model_type=="out":
-        #     self.train_model=Model(inputs=x,outputs=[gender_y,out_age])
-        #     self.pred_model=self.train_model
-        #     self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"out_age_y":self.age_loss_R}
-        #         ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"one_age_y":self.MAE_R})
+        if model_type=="soft":
+            self.train_model=Model(inputs=x,outputs=[gender_y,softmax_age_y])
+            self.pred_model=Model(inputs=x,outputs=[gender_y,out_age])
+            self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"soft_age_y":self.age_loss_C}
+                ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"soft_age_y":self.MAE_C})
+        if model_type=="out":
+            self.train_model=Model(inputs=x,outputs=[gender_y,out_age])
+            self.pred_model=self.train_model
+            self.train_model.compile(optimizer=self.optimizer,loss={"gender_y":self.gender_loss,"out_age_y":self.age_loss_R}
+                ,metrics={"gender_y":[self.g_acc_3,self.g_acc_5,self.g_acc_7],"out_age_y":self.MAE_R})
         # self.train_model.summary()
     def PoolingTotal(self,x):
         y=tf.reduce_mean(x,axis=[1,2])
@@ -112,10 +116,6 @@ class age_gender_classifier():
         conf,value=tf.split(x,[1,tf.shape(x)[-1]-1],axis=-1)
         value=tf.sigmoid(value)
         value=tf.stop_gradient(value)
-        # soft_conf=tf.reshape(conf,(tf.shape(conf)[0],-1))
-        # soft_conf=tf.nn.softmax(soft_conf)
-        # soft_conf=tf.reshape(soft_conf,tf.shape(conf))
-        # y=tf.reduce_sum(soft_conf*value,axis=[1,2])
         conf=tf.sigmoid(conf)
         div=tf.reduce_sum(conf,axis=[1,2])
         y=tf.reduce_sum(conf*value,axis=[1,2])
@@ -126,23 +126,35 @@ class age_gender_classifier():
         value=tf.sigmoid(value)
         y=tf.reduce_mean(value,axis=[1,2])
         return y
+    def max_layer(self,x):
+        conf,value=tf.split(x,[1,tf.shape(x)[-1]-1],axis=-1)
+        conf=tf.sigmoid(conf)
+        value=tf.sigmoid(value)
+        conf=tf.reshape(conf,(tf.shape(conf)[0],-1,1))
+        value=tf.reshape(value,(tf.shape(value)[0],-1,tf.shape(value)[3]))
+        print(conf)
+        print(value)
+        arg_max_conf=tf.argmax(conf,axis=-1)
+        one_hot_conf=tf.one_hot(arg_max_conf,depth=tf.shape(conf)[-1])
+        max_value=tf.reduce_max(value*one_hot_conf,axis=1)
+        return max_value
     def weighted_average(self,x):
+        x=tf.nn.softmax(x*10)
         number_tensor=tf.expand_dims(tf.range(0,self.age_width,1),axis=0)
         number_tensor=tf.cast(number_tensor,tf.float32)
-        y=tf.reduce_sum(number_tensor*x)
+        y=tf.reduce_sum(number_tensor*x,axis=-1)
+        y=tf.expand_dims(y,axis=-1)
         return y
     def smooth_l1_loss(self,y_true,y_pred):
         loss=tf.abs(y_true-y_pred)-0.5
         l2_loss=0.5*(y_true-y_pred)*(y_true-y_pred)
         loss=tf.where(tf.abs(y_true-y_pred)>1,loss,l2_loss)
         return tf.reduce_mean(loss)
-    def L2_loss(self,y_true,y_pred):
-        return tf.reduce_mean((y_true-y_pred)**2)
     def age_loss_R(self,y_true,y_pred):
         if self.model_type=="one":
-            loss=((y_true-y_pred)/100)**2
+            loss=((y_true-y_pred)/10)**2
         else:
-            loss=(y_true-y_pred)**2
+            loss=((y_true-y_pred)/10)**2
         loss=tf.reduce_mean(loss)
         return loss
     def age_loss_C(self,y_true,y_pred):
@@ -150,7 +162,8 @@ class age_gender_classifier():
         loss=tf.reduce_mean(loss)
         return loss
     def gender_loss(self,y_true,y_pred):
-        loss=binary_crossentropy(y_true,y_pred)
+        # loss=binary_crossentropy(y_true,y_pred)
+        loss=(y_true-y_pred)**2
         loss=tf.reduce_mean(loss)
         return loss
     def MAE_R(self,y_true,y_pred):#acc for age regression
@@ -198,7 +211,7 @@ class age_gender_classifier():
             one_hot_flag=True
         else:
             one_hot_flag=False
-        data_gen=data_generator("age_gender_UTK",batch_size=self.batch_size,one_hot_gender=one_hot_flag
+        data_gen=data_generator("age_gender_UTK",batch_size=self.batch_size,age_name=self.model_type,one_hot_gender=one_hot_flag
             ,random_shift=True,random_mirror=True,random_rotate=True,random_scale=True,shuffle=True)
         input_generator=data_gen.generator()
         step=data_gen.get_max_batch_index()
@@ -228,7 +241,7 @@ class age_gender_classifier():
             one_hot_flag=True
         else:
             one_hot_flag=False
-        data_gen=data_generator("age_gender_appa_val",batch_size=64,one_hot_gender=one_hot_flag)
+        data_gen=data_generator("age_gender_appa_val",batch_size=64,age_name=self.model_type,one_hot_gender=one_hot_flag)
         input_generator=data_gen.test_data()
         step=data_gen.get_max_batch_index()
         eval = self.train_model.evaluate_generator(input_generator,steps=step,verbose=0)
@@ -242,7 +255,7 @@ class age_gender_classifier():
             one_hot_flag=True
         else:
             one_hot_flag=False
-        data_gen=data_generator("age_gender_appa_test",batch_size=32,one_hot_gender=one_hot_flag)#batch_size means number of tested photos
+        data_gen=data_generator("age_gender_appa_test",batch_size=32,age_name=self.model_type,one_hot_gender=one_hot_flag)#batch_size means number of tested photos
         input_generator=data_gen.test_data(pick=True)
         # for i in range(2):
         (origin_imgs,out_imgs)=next(input_generator)

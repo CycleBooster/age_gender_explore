@@ -12,13 +12,14 @@ from multiprocessing import Process,Queue
 from dataset import data_writer,data_reader
 from data import *
 class data_generator():
-    def __init__(self,data_name,batch_size=32,one_hot_gender=True
+    def __init__(self,data_name,batch_size=32,age_name="one",one_hot_gender=True
     ,random_shift=False,random_mirror=False,random_rotate=False,random_scale=False,shuffle=False):
         self.output_size=(64,64)
         self.data_size=(128,128)#width and height must be the same to avoid resize and dataset get error
         # self.crop_size_list=[]#set after get data name
         self.data_name=data_name
         self.batch_size=batch_size
+        self.age_name=age_name
         self.one_hot_gender=one_hot_gender
         self.random_shift=random_shift
         self.random_mirror=random_mirror
@@ -211,12 +212,15 @@ class data_generator():
         return out_img
     def __set_label(self,meta_label):#decode label
         meta_age=meta_label[0]
+        meta_age=(int)(meta_age)
+        if meta_age>100:
+            meta_age=100
         if self.one_hot_gender:
             age=np.zeros(101)
-            age[(int)(meta_age)]=1
+            age[meta_age]=1
         else:
             age=np.zeros(1)
-            age[0]=(int)(meta_age)
+            age[0]=meta_age
         
         meta_gender=meta_label[1]#gender=1 for male
         gender=np.zeros(1)
@@ -243,9 +247,15 @@ class data_generator():
         for i in range(self.batch_size):
             _inputs[i]=self.__set_input(img_buffer[index_buffer[i+buffer_start_index]])
             _out_gender[i],_out_age[i]=self.__set_label(label_buffer[index_buffer[i+buffer_start_index]])
-        return (_inputs,{"gender_y":_out_gender,"one_age_y":_out_age})
+        # return (_inputs,{"gender_y":_out_gender,"one_age_y":_out_age})
+        return (_inputs,{"gender_y":_out_gender,self.age_name+"_age_y":_out_age})
+        # return (_inputs,{"gender_y":_out_gender})
         # return (_inputs,{"gender_y":_out_gender,"med_gen_y":_out_gender,"one_age_y":_out_age,"med_age_y":_out_age})
         # return (_inputs,{"med_gen_y":_out_gender,"med_age_y":_out_age})
+        _virtual_conf=np.zeros((self.batch_size,1))
+        _out_age=np.concatenate([_virtual_conf,_out_age],axis=-1)
+        _out_gender=np.concatenate([_virtual_conf,_out_gender],axis=-1)
+        return (_inputs,{"gender_y":_out_gender,"one_age_y":_out_age})
     def show_data(self):
         labels,imgs=self.__data_read()
         for i in range(10):

@@ -1,7 +1,7 @@
 if __name__ == '__main__':
     from keras_model import age_gender_classifier
-    test=age_gender_classifier(batch_size=64,lr=0.0001,model_type="one")
-    test.train(epoch=10)
+    test=age_gender_classifier(batch_size=64,lr=0.0001,model_type="out")
+    test.train(epoch=20)
     # test.validate(0,0,load_weight=False)
     # test.pred_test(0,0)
 

@@ -31,12 +31,14 @@ def show_result(imgs,labels,save=False,show=True,name=None,out_size=(320,320)):
         img=cv2.resize(img,out_size)
         gender=labels[0][index][0]
         age=(int)(labels[1][index][0]+0.5)
+        # gender=labels[index][0]
         if gender>0.5:
             gender="M"
         else:
             gender="F"
         cv2.rectangle(img,(0,0),(100,40),(0,0,0),-1)
         cv2.putText(img,gender+" "+str(age),(0,30),cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),1)
+        # cv2.putText(img,gender,(0,30),cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),1)
         if save:
             if name==None:
                 cv2.imwrite(save_path+str(index)+".jpg",img)
